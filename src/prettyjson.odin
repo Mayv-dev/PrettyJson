@@ -38,10 +38,12 @@ loop_tokens :: proc(json_str: string) -> (string, json.Error) {
 	indent := 0
 
 	for {
-		token := parser.curr_token
-		prev := parser.prev_token
+		prev_token := parser.prev_token
+		json.advance_token(&parser)
+		curr_token := parser.prev_token
+		next_token := parser.curr_token
 
-		switch token.kind {
+		switch curr_token.kind {
 		case .EOF:
 			return strings.to_string(builder), nil
 		case .Invalid:
@@ -52,24 +54,35 @@ loop_tokens :: proc(json_str: string) -> (string, json.Error) {
 			iter_colour_forward(&colour)
 
 			//Look ahead if followed by closing
-			new_line = true
-			indent += 1
+			if next_token.kind == .Close_Brace || next_token.kind == .Close_Bracket {
+				new_line = false
+			} else {
+				indent += 1
+				new_line = true
+			}
 
 		case .Close_Brace, .Close_Bracket:
 			//rainbow
-			strings.write_string(&builder, "\n")
+			if !(prev_token.kind == .Open_Brace || prev_token.kind == .Open_Bracket) {
+				add_indent(&indent, &builder)
+			}
 			iter_colour_backward(&colour)
 			strings.write_string(&builder, Colour_Values_var[colour])
 
 			//look ahead if followed by comma
-			new_line = true
-			indent -= 1
+			if next_token.kind == .Comma {
+				new_line = false
+			} else {
+				new_line = true
+				indent -= 1
+			}
 
 		case .Colon, .Ident:
 			//White
 			new_line = false
 
 		case .Comma:
+			//White
 			new_line = true
 
 		case .True, .False:
@@ -83,7 +96,7 @@ loop_tokens :: proc(json_str: string) -> (string, json.Error) {
 			new_line = false
 
 		case .String:
-			if is_key(&prev.kind) {
+			if is_key(&prev_token.kind) {
 				//Magenta
 				add_indent(&indent, &builder)
 				strings.write_string(&builder, Colour_Values_var[Colours.Magenta])
@@ -105,12 +118,11 @@ loop_tokens :: proc(json_str: string) -> (string, json.Error) {
 			new_line = false
 		}
 
-		strings.write_string(&builder, token.text)
+		strings.write_string(&builder, curr_token.text)
 		if new_line {
 			strings.write_string(&builder, "\n")
 		}
 
-		json.advance_token(&parser)
 	}
 }
 
